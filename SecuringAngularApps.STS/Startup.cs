@@ -59,7 +59,6 @@ namespace SecuringAngularApps.STS
                 .AddInMemoryClients(Config.GetClients())
                 .AddAspNetIdentity<ApplicationUser>();
 
-
             if (Environment.IsDevelopment())
             {
                 builder.AddDeveloperSigningCredential();
