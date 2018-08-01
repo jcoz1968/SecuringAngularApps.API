@@ -13,6 +13,7 @@ namespace SecuringAngularApps.API.Controllers
 {
     [Produces("application/json")]
     [Route("api/Projects")]
+    [Authorize]
     public class ProjectsController : Controller
     {
         private readonly ProjectDbContext _context;
@@ -26,16 +27,35 @@ namespace SecuringAngularApps.API.Controllers
         [HttpGet]
         public IEnumerable<Project> GetProjects()
         {
-            return _context.Projects;
+            var claims = (from c in User.Claims select new { c.Type, c.Value }).ToList();
+            claims.ForEach(c =>
+                Console.WriteLine($"{c.Type}: {c.Value}"));
+            if (User.IsInRole("Admin"))
+            {
+                return _context.Projects;
+            }
+            else
+            {
+                var userId = this.User.FindFirstValue(ClaimTypes.NameIdentifier);
+                List<int> userProjectIds = _context.UserPermissions.Where(p =>
+                    p.ProjectId.HasValue && p.UserProfileId == userId).Select(up => up.ProjectId.Value).ToList();
+
+                return _context.Projects.Where(p => userProjectIds.Contains(p.Id));
+            }
         }
 
         // GET: api/Projects/5
         [HttpGet("{id}")]
-        public IActionResult GetProject([FromRoute] int id)
+        public async Task<IActionResult> GetProject([FromRoute] int id)
         {
             if (!ModelState.IsValid)
             {
                 return BadRequest(ModelState);
+            }
+
+            if (!await ProjectEditAccessCheck(id, false))
+            {
+                return Forbid();
             }
 
             var project = _context.Projects
@@ -52,6 +72,7 @@ namespace SecuringAngularApps.API.Controllers
         }
 
         [HttpGet("{id}/Users")]
+        [Authorize(Roles = "Admin")]
         public IActionResult GetProjectUsers([FromRoute] int id)
         {
             var perms = _context.UserPermissions.Where(up => up.ProjectId == id).ToList();
@@ -76,7 +97,10 @@ namespace SecuringAngularApps.API.Controllers
             {
                 return BadRequest();
             }
-
+            if(!await ProjectEditAccessCheck(id, true))
+            {
+                return Forbid();
+            }
             _context.Entry(project).State = EntityState.Modified;
 
             try
@@ -137,8 +161,13 @@ namespace SecuringAngularApps.API.Controllers
         [HttpPost("Milestones")]
         public async Task<IActionResult> AddMilestone([FromBody] Milestone milestone)
         {
+            
             var existing = await _context.Milestones.FirstOrDefaultAsync(m => m.Id == milestone.Id);
             if (existing != null) return StatusCode(409);
+            if (!await MilestoneAccessCheck(existing))
+            {
+                return Forbid();
+            }
             _context.Milestones.Add(milestone);
             await _context.SaveChangesAsync();
             return CreatedAtAction("GetProject", new { id = milestone.ProjectId }, milestone);
@@ -149,6 +178,10 @@ namespace SecuringAngularApps.API.Controllers
         {
             var item = await _context.Milestones.FirstOrDefaultAsync(m => m.Id == id);
             if (item == null) return NotFound();
+            if(!await MilestoneAccessCheck(item))
+            {
+                return Forbid();
+            }
             _context.Milestones.Remove(item);
             await _context.SaveChangesAsync();
             return Ok();
@@ -160,10 +193,28 @@ namespace SecuringAngularApps.API.Controllers
             if (milestone.Id != id) return BadRequest();
             var item = await _context.Milestones.FirstOrDefaultAsync(ms => ms.Id == id);
             if (item == null) return NotFound();
+            if (!await MilestoneAccessCheck(item))
+            {
+                return Forbid();
+            }
             item.MilestoneStatusId = milestone.MilestoneStatusId;
             item.Name = milestone.Name;
             await _context.SaveChangesAsync();
             return Ok(milestone);
+        }
+
+        private async Task<bool> MilestoneAccessCheck(Milestone item)
+        {
+            var userId = this.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var perm = await _context.UserPermissions.FirstOrDefaultAsync(pm => pm.ProjectId == item.ProjectId && pm.UserProfileId == userId);
+            return (perm != null && perm.Value == "Edit");
+        }
+
+        private async Task<bool> ProjectEditAccessCheck(int projectId, bool edit)
+        {
+            var userId = this.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var userAccess = await _context.UserPermissions.FirstOrDefaultAsync(up => up.ProjectId == projectId && up.UserProfileId == userId);
+            return (userAccess != null && (edit ? userAccess.Value == "Edit" : true));
         }
 
         [HttpGet("MilestoneStatuses")]
