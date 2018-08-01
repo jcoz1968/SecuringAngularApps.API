@@ -34,6 +34,13 @@ namespace SecuringAngularApps.API
                     .AllowCredentials();
                 });
             });
+            services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+                .AddJwtBearer(options => 
+                {
+                    options.Authority = "http://localhost:4242/";
+                    options.RequireHttpsMetadata = false;
+                    options.Audience = "projects-api";
+                });
             services.AddMvc();
         }
 
@@ -44,6 +51,7 @@ namespace SecuringAngularApps.API
                 app.UseDeveloperExceptionPage();
             }
             app.UseCors("AllRequests");
+            app.UseAuthentication();
             app.UseMvc();
         }
     }
