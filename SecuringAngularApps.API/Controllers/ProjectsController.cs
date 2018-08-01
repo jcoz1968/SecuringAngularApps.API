@@ -28,15 +28,20 @@ namespace SecuringAngularApps.API.Controllers
         public IEnumerable<Project> GetProjects()
         {
             var claims = (from c in User.Claims select new { c.Type, c.Value }).ToList();
-            claims.ForEach(c => 
-                Console.WriteLine($"{c.Type}: {c.Value}")
-            );
+            claims.ForEach(c =>
+                Console.WriteLine($"{c.Type}: {c.Value}"));
+            if (User.IsInRole("Admin"))
+            {
+                return _context.Projects;
+            }
+            else
+            {
+                var userId = this.User.FindFirstValue(ClaimTypes.NameIdentifier);
+                List<int> userProjectIds = _context.UserPermissions.Where(p =>
+                    p.ProjectId.HasValue && p.UserProfileId == userId).Select(up => up.ProjectId.Value).ToList();
 
-            var userId = this.User.FindFirstValue(ClaimTypes.NameIdentifier);
-            List<int> userProjectIds = _context.UserPermissions.Where(p => 
-                p.ProjectId.HasValue && p.UserProfileId == userId).Select(up => up.ProjectId.Value).ToList();
-
-            return _context.Projects.Where(p => userProjectIds.Contains(p.Id));
+                return _context.Projects.Where(p => userProjectIds.Contains(p.Id));
+            }
         }
 
         // GET: api/Projects/5
@@ -67,6 +72,7 @@ namespace SecuringAngularApps.API.Controllers
         }
 
         [HttpGet("{id}/Users")]
+        [Authorize(Roles = "Admin")]
         public IActionResult GetProjectUsers([FromRoute] int id)
         {
             var perms = _context.UserPermissions.Where(up => up.ProjectId == id).ToList();
