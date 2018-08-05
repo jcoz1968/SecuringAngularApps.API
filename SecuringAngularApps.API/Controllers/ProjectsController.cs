@@ -205,6 +205,10 @@ namespace SecuringAngularApps.API.Controllers
 
         private async Task<bool> MilestoneAccessCheck(Milestone item)
         {
+            if(User.IsInRole("Admin"))
+            {
+                return true;
+            }
             var userId = this.User.FindFirstValue(ClaimTypes.NameIdentifier);
             var perm = await _context.UserPermissions.FirstOrDefaultAsync(pm => pm.ProjectId == item.ProjectId && pm.UserProfileId == userId);
             return (perm != null && perm.Value == "Edit");
@@ -212,6 +216,10 @@ namespace SecuringAngularApps.API.Controllers
 
         private async Task<bool> ProjectEditAccessCheck(int projectId, bool edit)
         {
+            if (User.IsInRole("Admin"))
+            {
+                return true;
+            }
             var userId = this.User.FindFirstValue(ClaimTypes.NameIdentifier);
             var userAccess = await _context.UserPermissions.FirstOrDefaultAsync(up => up.ProjectId == projectId && up.UserProfileId == userId);
             return (userAccess != null && (edit ? userAccess.Value == "Edit" : true));
